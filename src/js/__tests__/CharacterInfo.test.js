@@ -1,5 +1,6 @@
 import { formatCharacterInfo } from '../utils';
 import GameController from '../GameController';
+import Team from '../Team';
 
 describe('formatCharacterInfo', () => {
   test('should format character info correctly', () => {
@@ -23,18 +24,30 @@ describe('GameController - onCellEnter', () => {
       selectCell: jest.fn(),
       hideCellTooltip: jest.fn(),
       deselectCell: jest.fn(),
-      cells: Array(64).fill().map(() => ({}))
+      cells: Array(64).fill().map(() => ({})),
     };
     gameController = new GameController(gamePlayMock);
+    gameController.playerTeam = new Team();
+    gameController.opponentTeam = new Team();
+    const bowman = { level: 2, attack: 30, defence: 15, health: 50, type: 'bowman' };
     gameController.positionedCharacters = [
-      { position: 1, character: { level: 2, attack: 30, defence: 15, health: 50, type: 'bowman' } },
+      {
+        position: 1,
+        character: bowman,
+      },
     ];
+    gameController.playerTeam.add(bowman); 
   });
 
   test('should show character info in tooltip when hovering over a cell with a character', () => {
     const index = 1;
     const character = gameController.positionedCharacters[0].character;
-    const expectedTooltip = formatCharacterInfo(character.level, character.attack, character.defence, character.health);
+    const expectedTooltip = formatCharacterInfo(
+      character.level,
+      character.attack,
+      character.defence,
+      character.health
+    );
     gameController.onCellEnter(index);
     expect(gamePlayMock.showCellTooltip).toHaveBeenCalledWith(expectedTooltip, index);
     expect(gamePlayMock.setCursor).toHaveBeenCalledWith('pointer');

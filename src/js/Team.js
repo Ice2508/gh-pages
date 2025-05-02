@@ -27,4 +27,8 @@ export default class Team {
   toArray() {
     return [...this.characters];
   }
+
+  has(character) {
+    return this.characters.includes(character);
+  }
 }

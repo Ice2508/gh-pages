@@ -51,83 +51,86 @@ export default class GameController {
    return new CharacterClass(level, attack, defence, health, moveRange, attackRange);
   }
 
-  loadGameState(loadedState) {
-    try {
-      
-      if (!loadedState || typeof loadedState !== 'object') {
-        throw new Error('Некорректное загруженное состояние игры');
-      }
-
-      this.gameState = GameState.from(loadedState);
-      this.currentLevel = loadedState.currentLevel || 1;
-      this.isGameOver = loadedState.isGameOver || false;
-      this.playerTeam = new Team();
-      this.opponentTeam = new Team();
-      this.positionedCharacters = [];
-
-      
-      for (const { character: charData, position } of loadedState.positionedCharacters) {
-       
-        if (position < 0 || position >= this.gamePlay.boardSize ** 2) {
-          throw new Error(`Некорректная позиция персонажа: ${position}`);
-        }
-        const character = this.createCharacterFromData(charData);
-        this.positionedCharacters.push(new PositionedCharacter(character, position));
-
-       
-        if (['bowman', 'swordsman', 'magician'].includes(character.type)) {
-          this.playerTeam.add(character);
-        } else if (['vampire', 'undead', 'daemon'].includes(character.type)) {
-          this.opponentTeam.add(character);
-        }
-      }
-
-     
-      const theme = this.getThemeForLevel(this.currentLevel);
-      this.gamePlay.drawUi(theme);
-      this.gamePlay.redrawPositions(this.positionedCharacters);
-
-     
-      if (this.selectedCharacterIndex !== undefined) {
-        this.gamePlay.deselectCell(this.selectedCharacterIndex);
-        this.selectedCharacterIndex = undefined;
-      }
-    } catch (error) {
-      GamePlay.showError(`Ошибка при загрузке игры: ${error.message}`);
+loadGameState(loadedState) {
+  try {
+    if (!loadedState || typeof loadedState !== 'object') {
+      throw new Error('Некорректное загруженное состояние игры');
     }
+
+    this.gameState = GameState.from(loadedState);
+    this.currentLevel = loadedState.currentLevel || 1;
+    this.isGameOver = loadedState.isGameOver || false;
+    this.playerTeam = new Team();
+    this.opponentTeam = new Team();
+    this.positionedCharacters = [];
+
+    
+    const characterMap = new Map();
+
+    (loadedState.playerTeam || []).forEach(charData => {
+      const character = this.createCharacterFromData(charData);
+      this.playerTeam.add(character);
+      characterMap.set(JSON.stringify(charData), character);
+    });
+
+    (loadedState.opponentTeam || []).forEach(charData => {
+      const character = this.createCharacterFromData(charData);
+      this.opponentTeam.add(character);
+      characterMap.set(JSON.stringify(charData), character);
+    });
+
+    for (const { character: charData, position } of loadedState.positionedCharacters) {
+      if (position < 0 || position >= this.gamePlay.boardSize ** 2) {
+        throw new Error(`Некорректная позиция персонажа: ${position}`);
+      }
+      const character = characterMap.get(JSON.stringify(charData)) || this.createCharacterFromData(charData);
+      this.positionedCharacters.push(new PositionedCharacter(character, position));
+    }
+
+    const theme = this.getThemeForLevel(this.currentLevel);
+    this.gamePlay.drawUi(theme);
+    this.gamePlay.redrawPositions(this.positionedCharacters);
+
+    if (this.selectedCharacterIndex !== undefined) {
+      this.gamePlay.deselectCell(this.selectedCharacterIndex);
+      this.selectedCharacterIndex = undefined;
+    }
+  } catch (error) {
+    GamePlay.showError(`Ошибка при загрузке игры: ${error.message}`);
   }
+}
 
   saveGameState() {
-    try {
-      this.gameState.currentLevel = this.currentLevel;
-      this.gameState.isGameOver = this.isGameOver;
+  try {
+    this.gameState.currentLevel = this.currentLevel;
+    this.gameState.isGameOver = this.isGameOver;
 
-      
-      const charactersToSave = this.positionedCharacters.map(pc => ({
-        type: pc.character.type,
-        level: pc.character.level,
-        attack: pc.character.attack,
-        defence: pc.character.defence,
-        health: pc.character.health,
-        x: pc.character.x,
-        y: pc.character.y,
-        moveRange: pc.character.moveRange,
-        attackRange: pc.character.attackRange
-      }));
+    const mapCharacter = character => ({
+      type: character.type,
+      level: character.level,
+      attack: character.attack,
+      defence: character.defence,
+      health: character.health,
+      x: character.x,
+      y: character.y,
+      moveRange: character.moveRange,
+      attackRange: character.attackRange
+    });
 
-      this.gameState.playerTeam = charactersToSave.filter(c => ['bowman', 'swordsman', 'magician'].includes(c.type));
-      this.gameState.opponentTeam = charactersToSave.filter(c => ['vampire', 'undead', 'daemon'].includes(c.type));
-      this.gameState.positionedCharacters = this.positionedCharacters.map(pc => ({
-        character: charactersToSave.find(c => c.type === pc.character.type && c.health === pc.character.health),
-        position: pc.position
-      }));
+    this.gameState.playerTeam = Array.from(this.playerTeam.characters).map(mapCharacter);
+    this.gameState.opponentTeam = Array.from(this.opponentTeam.characters).map(mapCharacter);
 
-      this.stateService.save(this.gameState);
-      GamePlay.showMessage('Игра успешно сохранена');
-    } catch (error) {
-      GamePlay.showError(`Ошибка при сохранении игры: ${error.message}`);
-    }
+    this.gameState.positionedCharacters = this.positionedCharacters.map(pc => ({
+      character: mapCharacter(pc.character),
+      position: pc.position
+    }));
+
+    this.stateService.save(this.gameState);
+    GamePlay.showMessage('Игра успешно сохранена');
+  } catch (error) {
+    GamePlay.showError(`Ошибка при сохранении игры: ${error.message}`);
   }
+}
 
   init() {
     this.gamePlay.drawUi(themes.prairie.name);
@@ -329,9 +332,8 @@ export default class GameController {
   }
 
   isPlayer(character) {
-    return ['bowman', 'swordsman', 'magician'].includes(character.type);
+    return this.playerTeam.has(character);
   }
-
   getMoveRange(index, distance) {
     return getMoveRange(index, distance, this.gamePlay.boardSize);
   }
@@ -380,64 +382,62 @@ export default class GameController {
     this.gameState.addScore(500);
   }
 
-  checkGameEnd() {
-    const computerCharacters = this.positionedCharacters.filter(pc => !this.isPlayer(pc.character));
-    const playerCharacters = this.positionedCharacters.filter(pc => this.isPlayer(pc.character));
+checkGameEnd() {
+  const computerCharacters = Array.from(this.opponentTeam.characters).filter(c => c.health > 0);
+  const playerCharacters = Array.from(this.playerTeam.characters).filter(c => c.health > 0);
 
-    if (computerCharacters.length === 0 && playerCharacters.length > 0) {
-      this.levelUp();
-      this.startNewLevel();
-      return true;
-    } else if (playerCharacters.length === 0) {
-      this.isGameOver = true;
-      alert(`Игра окончена! Победа компьютера! Счет: ${this.gameState.score}, Максимальный счет: ${this.gameState.maxScore}`);
-      return false;
-    }
+  if (computerCharacters.length === 0 && playerCharacters.length > 0) {
+    this.levelUp();
+    this.startNewLevel();
+    return true;
+  } else if (playerCharacters.length === 0) {
+    this.isGameOver = true;
+    alert(`Игра окончена! Победа компьютера! Счет: ${this.gameState.score}, Максимальный счет: ${this.gameState.maxScore}`);
     return false;
   }
+  return false;
+}
 
-  startNewLevel() {
-    this.currentLevel += 1;
-    const themeMap = {
-      2: themes.desert.name,
-      3: themes.arctic.name,
-      4: themes.mountain.name
-    };
+startNewLevel() {
+  this.currentLevel += 1;
+  const themeMap = {
+    2: themes.desert.name,
+    3: themes.arctic.name,
+    4: themes.mountain.name
+  };
 
-    const newTheme = themeMap[this.currentLevel] || themes.prairie.name;
-    if (this.currentLevel > 4) {
-      this.isGameOver = true;
-      alert(`Поздравляем! Вы прошли игру! Счет: ${this.gameState.score}, Максимальный счет: ${this.gameState.maxScore}`);
-      try {
-        this.stateService.save(this.gameState);
-      } catch (error) {
-        console.warn('Ошибка сохранения состояния:', error);
-      }
-      return;
-    }
-
-    this.gamePlay.drawUi(newTheme);
-
-    const survivingPlayerCharacters = this.positionedCharacters
-      .filter(pc => this.isPlayer(pc.character))
-      .map(pc => pc.character);
-
-    const opponentTypes = [Vampire, Undead, Daemon];
-    const maxLevel = this.currentLevel;
-    const characterCount = 4;
-    this.opponentTeam = generateTeam(opponentTypes, maxLevel, characterCount);
-
-    this.playerTeam = new Team();
-    survivingPlayerCharacters.forEach(character => this.playerTeam.add(character));
-    this.placeCharacters();
-    this.gamePlay.redrawPositions(this.positionedCharacters);
-    this.gameState.currentPlayer = 'player';
+  const newTheme = themeMap[this.currentLevel] || themes.prairie.name;
+  if (this.currentLevel > 4) {
+    this.isGameOver = true;
+    alert(`Поздравляем! Вы прошли игру! Счет: ${this.gameState.score}, Максимальный счет: ${this.gameState.maxScore}`);
     try {
       this.stateService.save(this.gameState);
     } catch (error) {
       console.warn('Ошибка сохранения состояния:', error);
     }
+    return;
   }
+
+  this.gamePlay.drawUi(newTheme);
+
+  const survivingPlayerCharacters = Array.from(this.playerTeam.characters).filter(c => c.health > 0);
+
+  const opponentTypes = [Vampire, Undead, Daemon];
+  const maxLevel = this.currentLevel;
+  const characterCount = 4;
+  this.opponentTeam = generateTeam(opponentTypes, maxLevel, characterCount);
+
+  this.playerTeam = new Team();
+  survivingPlayerCharacters.forEach(character => this.playerTeam.add(character));
+  this.placeCharacters();
+  this.gamePlay.redrawPositions(this.positionedCharacters);
+  this.gameState.currentPlayer = 'player';
+  try {
+    this.stateService.save(this.gameState);
+  } catch (error) {
+    console.warn('Ошибка сохранения состояния:', error);
+  }
+}
 
   startNewGame() {
     this.isGameOver = false;

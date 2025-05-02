@@ -37,6 +37,28 @@ describe('GameController - Load Game State Tests', () => {
     const loadedState = {
       currentLevel: 2,
       isGameOver: false,
+      playerTeam: [
+        {
+          type: 'bowman',
+          level: 1,
+          attack: 25,
+          defence: 25,
+          health: 100,
+          moveRange: 2,
+          attackRange: 2,
+        },
+      ],
+      opponentTeam: [
+        {
+          type: 'vampire',
+          level: 1,
+          attack: 25,
+          defence: 25,
+          health: 100,
+          moveRange: 2,
+          attackRange: 2,
+        },
+      ],
       positionedCharacters: [
         {
           character: {
